@@ -1,0 +1,82 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "uwmirror"
+dynamic = ["version"]
+description = "Mirror the center 16:9 of an ultrawide monitor to a TV — lightweight DXGI capture, no OBS."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Jonathan Allard" }]
+keywords = ["ultrawide", "mirror", "dxgi", "desktop-duplication", "second-screen", "tv"]
+classifiers = [
+  "Environment :: Win32 (MS Windows)",
+  "Operating System :: Microsoft :: Windows :: Windows 10",
+  "Operating System :: Microsoft :: Windows :: Windows 11",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Multimedia :: Graphics :: Capture :: Screen Capture",
+]
+dependencies = [
+  "dxcam>=0.3",
+  "pygame-ce>=2.5.7",
+  "numpy>=1.24",
+  "tomli>=2; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+cpp = ["dxcam-cpp"]
+
+[project.scripts]
+uwmirror = "uwmirror.cli:main"
+
+[project.gui-scripts]
+uwmirrorw = "uwmirror.cli:main"
+
+[project.urls]
+Repository = "https://github.com/j-Allard-22/uwmirror"
+Changelog = "https://github.com/j-Allard-22/uwmirror/blob/main/CHANGELOG.md"
+Issues = "https://github.com/j-Allard-22/uwmirror/issues"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-cov", "ruff", "mypy", "build"]
+
+[tool.hatch.version]
+path = "src/uwmirror/__init__.py"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+strict = true
+# numpy 2.x stubs use PEP 695 syntax, which mypy only accepts when targeting >= 3.12;
+# 3.10 compatibility is covered by ruff (target-version) and the CI test matrix.
+python_version = "3.12"
+files = ["src"]
+
+[[tool.mypy.overrides]]
+# dxcam/dxcam_cpp ship no type stubs; tomli is only installed on Python 3.10.
+module = ["dxcam.*", "dxcam_cpp.*", "tomli.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "local_display: requires a real desktop session and dxcam (run manually on a dev machine)",
+]
+addopts = "-m 'not local_display' --cov=uwmirror --cov-fail-under=75"
+
+[tool.coverage.run]
+source = ["uwmirror"]
+
+[tool.coverage.report]
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+]
