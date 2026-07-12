@@ -19,6 +19,24 @@ jobs:
           name: dist
           path: dist/
 
+  build-exe:
+    # PyInstaller can only build a Windows exe on Windows (no cross-compiling).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # bundled interpreter; matches the dev/CI baseline
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e . --group build-exe
+      - run: pyinstaller uwmirror.spec --noconfirm
+      - name: Smoke-test the frozen bundle imports
+        run: python -c "import PyInstaller; print('built', __import__('pathlib').Path('dist/uwmirror.exe').stat().st_size)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uwmirror-exe
+          path: dist/uwmirror.exe
+
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -33,7 +51,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: publish
+    needs: [publish, build-exe]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42,6 +60,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: dist
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: uwmirror-exe
           path: dist/
       - name: Extract this version's changelog section
         run: |
