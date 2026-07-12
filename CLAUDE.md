@@ -57,7 +57,7 @@ Strict pure/I-O split so logic tests run on headless CI (real Desktop Duplicatio
 
 ## Release
 
-Bump `__version__` in `src/uwmirror/__init__.py`, move CHANGELOG `[Unreleased]` into a dated section, tag `vX.Y.Z`, push the tag. `.github/workflows/release.yml` builds the wheel/sdist and (on windows-latest) `uwmirror.exe`, publishes to PyPI (OIDC trusted publishing — the publisher must be registered on PyPI for `uwmirror`), and creates the GitHub Release with the CHANGELOG section as notes plus the exe attached.
+Bump `__version__` in `src/uwmirror/__init__.py`, move CHANGELOG `[Unreleased]` into a dated section, tag `vX.Y.Z`, push the tag. `.github/workflows/release.yml` builds the wheel/sdist and (on windows-latest) `uwmirror.exe`, publishes to PyPI (OIDC trusted publishing — the publisher must be registered on PyPI for `uwmirror`), and creates the GitHub Release with the CHANGELOG section as notes plus the exe attached. Full runbook (incl. one-time PyPI trusted-publisher registration): [docs/releasing.md](docs/releasing.md).
 
 ## Known limitations (by design, don't "fix")
 
