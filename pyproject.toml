@@ -28,6 +28,7 @@ dependencies = [
 
 [project.optional-dependencies]
 cpp = ["dxcam-cpp"]
+tray = ["pystray>=0.19", "pillow>=10"]
 
 [project.scripts]
 uwmirror = "uwmirror.cli:main"
@@ -41,7 +42,9 @@ Changelog = "https://github.com/j-Allard-22/uwmirror/blob/main/CHANGELOG.md"
 Issues = "https://github.com/j-Allard-22/uwmirror/issues"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-cov", "ruff", "mypy", "build"]
+dev = ["pytest>=8", "pytest-cov", "ruff", "mypy", "build", "pystray>=0.19", "pillow>=10"]
+# Kept separate from `dev` so the exe build image installs only what it needs.
+build-exe = ["pyinstaller>=6.10", "pystray>=0.19", "pillow>=10"]
 
 [tool.hatch.version]
 path = "src/uwmirror/__init__.py"
@@ -61,8 +64,9 @@ python_version = "3.12"
 files = ["src"]
 
 [[tool.mypy.overrides]]
-# dxcam/dxcam_cpp ship no type stubs; tomli is only installed on Python 3.10.
-module = ["dxcam.*", "dxcam_cpp.*", "tomli.*"]
+# dxcam/dxcam_cpp ship no type stubs; tomli is only installed on Python 3.10;
+# pystray is an optional extra; Pillow's stubs are inconsistent across versions.
+module = ["dxcam.*", "dxcam_cpp.*", "tomli.*", "pystray.*", "PIL.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

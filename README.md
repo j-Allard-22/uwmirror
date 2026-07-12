@@ -21,11 +21,20 @@ single lightweight Python process (~150 MB RAM, a few percent of one core).
 
 ## Install
 
+**No Python?** Download `uwmirror.exe` from the [latest release](https://github.com/j-Allard-22/uwmirror/releases) —
+a single self-contained file with the system-tray icon built in. Double-click
+it (no console window), or point Task Scheduler at it for
+[autostart](docs/autostart.md).
+
+**With Python (3.10+):**
+
 ```
-pipx install uwmirror      # or: uvx uwmirror, or: pip install uwmirror
+pipx install "uwmirror[tray]"      # or: uvx "uwmirror[tray]", or: pip install "uwmirror[tray]"
 ```
 
-Python 3.10+ is required. All dependencies are pure wheels (dxcam, pygame-ce, numpy).
+The `[tray]` extra adds the system-tray icon (pystray + Pillow). Plain
+`uwmirror` works too — you just control it with the global hotkeys instead of a
+tray. All dependencies are pure wheels (dxcam, pygame-ce, numpy).
 
 ## Quickstart
 
@@ -62,9 +71,11 @@ Every flag can also be set in `%APPDATA%\uwmirror\config.toml` (same names,
 | `--cursor` / `--no-cursor` | on | overlay the mouse cursor (capture omits it) |
 | `--topmost` / `--no-topmost` | on | keep the mirror above other windows, without stealing focus |
 | `--windowed` | off | small framed window instead of fullscreen (debugging) |
-| `--hotkeys` / `--no-hotkeys` | on | global pause/blank hotkeys |
+| `--hotkeys` / `--no-hotkeys` | on | global pause/blank/quit hotkeys |
+| `--tray` / `--no-tray` | on | system-tray icon (needs the `[tray]` extra) |
 | `--pause-hotkey SPEC` | `ctrl+alt+p` | freeze the mirror on the last frame |
 | `--blank-hotkey SPEC` | `ctrl+alt+b` | black out the TV (privacy) |
+| `--quit-hotkey SPEC` | `ctrl+alt+q` | quit the mirror |
 | `--backend dxcam\|dxcam-cpp` | dxcam | capture library (`pip install uwmirror[cpp]` for the C++ fork) |
 | `--config PATH` | `%APPDATA%\uwmirror\config.toml` | config file location |
 | `--log-level LEVEL` | info | debug, info, warning, error |
@@ -78,24 +89,28 @@ fps = 30
 pause-hotkey = "ctrl+alt+f9"
 ```
 
-## Hotkeys
+## Controls
+
+The mirror window on the TV deliberately never takes focus, so you drive it
+from the **tray icon** (right-click → Pause / Blank / Quit, with live
+checkmarks) and from **global hotkeys**:
 
 | Keys | Action |
 |---|---|
 | `Ctrl+Alt+P` (global) | pause/resume — freezes the last frame |
 | `Ctrl+Alt+B` (global) | blank/unblank — black screen |
-| `Space` / `B` (mirror window focused) | same, as a local fallback |
-| `Esc` / `Q` (mirror window focused) | quit |
+| `Ctrl+Alt+Q` (global) | quit |
+| `Space` / `B` / `Esc` / `Q` (mirror window focused) | same, as a local fallback |
 
 Global hotkeys use `RegisterHotKey` — no admin rights, no keyboard hooks. If a
-chord is taken by another app, uwmirror logs a warning and keeps running;
-pick a different chord with `--pause-hotkey`/`--blank-hotkey`.
+chord is taken by another app, uwmirror logs a warning and keeps running; pick
+a different chord with `--pause-hotkey`/`--blank-hotkey`/`--quit-hotkey`.
 
 ## Start automatically at logon
 
-Use `uwmirrorw` (the console-less variant) with Task Scheduler — see
-[docs/autostart.md](docs/autostart.md) for the one-line `schtasks` command and
-the reason for the startup delay.
+Point Task Scheduler at `uwmirror.exe`, or at `uwmirrorw` (the console-less
+entry point of a `pip` install) — see [docs/autostart.md](docs/autostart.md)
+for the one-line `schtasks` command and the reason for the startup delay.
 
 ## Limitations
 
@@ -129,6 +144,8 @@ ruff check . && ruff format --check . && mypy && pytest
 ```
 
 Real-capture integration tests (need a real desktop + GPU): `pytest -m local_display --no-cov`.
+
+Building the standalone exe is documented in [docs/build-exe.md](docs/build-exe.md).
 
 ## License
 

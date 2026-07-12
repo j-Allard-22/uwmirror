@@ -69,6 +69,13 @@ class TestMainDispatch:
         assert settings.cursor is False
         assert settings.windowed is True
 
+    def test_tray_and_quit_hotkey_flags(self, captured_run, tmp_path, monkeypatch):
+        monkeypatch.setenv("APPDATA", str(tmp_path))
+        assert main(["--no-tray", "--quit-hotkey", "ctrl+alt+f12"]) == 0
+        settings = captured_run[0]
+        assert settings.tray is False
+        assert settings.quit_hotkey == "ctrl+alt+f12"
+
     def test_config_file_applies_and_cli_wins(self, captured_run, tmp_path: Path):
         config = tmp_path / "config.toml"
         config.write_text("fps = 24\nscale = 'fast'\n", encoding="utf-8")

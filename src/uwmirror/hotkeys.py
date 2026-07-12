@@ -48,6 +48,7 @@ class HotkeyError(Exception):
 class HotkeyAction(Enum):
     PAUSE = "pause"
     BLANK = "blank"
+    QUIT = "quit"
 
 
 @dataclass(frozen=True)

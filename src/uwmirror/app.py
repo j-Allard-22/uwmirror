@@ -12,10 +12,13 @@ import queue
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     import pygame
+
+    from uwmirror.hotkeys import HotkeyAction
+    from uwmirror.tray import TrayController
 
 from uwmirror.capture import CaptureBackend, CaptureLost, Frame
 from uwmirror.config import Settings
@@ -78,6 +81,43 @@ class LoopDeps:
     tick: Callable[[int], object]
     fps: int
     target_aspect: float
+    on_state: Callable[[AppState], None] | None = None
+
+
+def _drain(
+    source: queue.SimpleQueue[Any],
+    commands: list[Command],
+    mapping: dict[HotkeyAction, Command] | None = None,
+) -> None:
+    """Move every queued item into ``commands``, mapping actions to commands."""
+    while True:
+        try:
+            item = source.get_nowait()
+        except queue.Empty:
+            break
+        commands.append(mapping[item] if mapping is not None else item)
+
+
+def _start_tray(settings: Settings) -> TrayController | None:
+    """Start the system-tray controller, or return ``None`` if disabled/absent."""
+    if not settings.tray:
+        return None
+    from uwmirror.tray import TrayController, TrayUnavailable
+
+    try:
+        tray = TrayController()
+        tray.start()
+    except TrayUnavailable as exc:
+        log.info("system tray unavailable (%s); use the hotkeys instead", exc)
+        return None
+    except Exception:
+        # The tray is a convenience, never essential (the quit hotkey always
+        # works); a failure here must not take down the mirror or leak the
+        # already-started presenter/hotkey listener.
+        log.warning("system tray failed to start; use the hotkeys instead", exc_info=True)
+        return None
+    log.info("system tray active (right-click the icon for pause/blank/quit)")
+    return tray
 
 
 def _start_backend(deps: LoopDeps) -> tuple[CaptureBackend, Region]:
@@ -104,10 +144,15 @@ def run_loop(deps: LoopDeps) -> None:
     overlay: OverlayLike | None = None
     state = AppState()
     was_blanked = False
+    if deps.on_state is not None:
+        deps.on_state(state)
 
     try:
         while state.running:
+            previous = state
             state = reduce_state(state, deps.get_commands())
+            if deps.on_state is not None and state != previous:
+                deps.on_state(state)
             if not state.running:
                 break
 
@@ -166,6 +211,12 @@ def run(settings: Settings) -> int:
     hotkey_bindings = {
         HotkeyAction.PAUSE: parse_hotkey(settings.pause_hotkey),
         HotkeyAction.BLANK: parse_hotkey(settings.blank_hotkey),
+        HotkeyAction.QUIT: parse_hotkey(settings.quit_hotkey),
+    }
+    action_command = {
+        HotkeyAction.PAUSE: Command.TOGGLE_PAUSE,
+        HotkeyAction.BLANK: Command.TOGGLE_BLANK,
+        HotkeyAction.QUIT: Command.QUIT,
     }
 
     outputs = detect.parse_output_info(output_info_text(settings.backend))
@@ -221,7 +272,14 @@ def run(settings: Settings) -> int:
     if settings.hotkeys:
         listener = HotkeyListener(hotkey_bindings)
         listener.start()
-        log.info("hotkeys: %s pause, %s blank", settings.pause_hotkey, settings.blank_hotkey)
+        log.info(
+            "hotkeys: %s pause, %s blank, %s quit",
+            settings.pause_hotkey,
+            settings.blank_hotkey,
+            settings.quit_hotkey,
+        )
+
+    tray = _start_tray(settings)
 
     def get_commands() -> list[Command]:
         commands: list[Command] = []
@@ -236,14 +294,9 @@ def run(settings: Settings) -> int:
                 elif event.key == pygame.K_b:
                     commands.append(Command.TOGGLE_BLANK)
         if listener is not None:
-            while True:
-                try:
-                    action = listener.actions.get_nowait()
-                except queue.Empty:
-                    break
-                commands.append(
-                    Command.TOGGLE_PAUSE if action is HotkeyAction.PAUSE else Command.TOGGLE_BLANK
-                )
+            _drain(listener.actions, commands, action_command)
+        if tray is not None:
+            _drain(tray.actions, commands)
         return commands
 
     clock = pygame.time.Clock()
@@ -259,10 +312,13 @@ def run(settings: Settings) -> int:
         tick=clock.tick,
         fps=settings.fps,
         target_aspect=aspect(target_size),
+        on_state=(tray.set_state if tray is not None else None),
     )
     try:
         run_loop(deps)
     finally:
+        if tray is not None:
+            tray.stop()
         if listener is not None:
             listener.stop()
         presenter.close()

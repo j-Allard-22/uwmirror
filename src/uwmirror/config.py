@@ -39,10 +39,12 @@ class Settings:
     topmost: bool = True
     windowed: bool = False
     hotkeys: bool = True
+    tray: bool = True
     backend: str = "dxcam"
     log_level: str = "info"
     pause_hotkey: str = "ctrl+alt+p"
     blank_hotkey: str = "ctrl+alt+b"
+    quit_hotkey: str = "ctrl+alt+q"
 
 
 _VALID_KEYS = {f.name for f in fields(Settings)}
@@ -107,9 +109,9 @@ def _validate(settings: Settings) -> None:
         value = getattr(settings, name)
         if value is not None and (not _is_int(value) or value < 0):
             raise ConfigError(f"{name} must be a non-negative integer, got {value!r}")
-    for name in ("cursor", "topmost", "windowed", "hotkeys"):
+    for name in ("cursor", "topmost", "windowed", "hotkeys", "tray"):
         if not isinstance(getattr(settings, name), bool):
             raise ConfigError(f"{name} must be true or false, got {getattr(settings, name)!r}")
-    for name in ("pause_hotkey", "blank_hotkey"):
+    for name in ("pause_hotkey", "blank_hotkey", "quit_hotkey"):
         if not isinstance(getattr(settings, name), str):
             raise ConfigError(f"{name} must be a string, got {getattr(settings, name)!r}")

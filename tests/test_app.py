@@ -1,3 +1,5 @@
+import itertools
+
 import pytest
 from fakes import FakeCapture, FakePresenter, FakeScreen, ScriptedCommands
 
@@ -128,6 +130,20 @@ class TestRunLoop:
         run_loop(deps)  # factory pool is empty; creating a backend would assert
         assert presenter.presented == []
 
+    def test_on_state_fires_initially_and_on_change_only(self):
+        capture = FakeCapture()
+        seen: list[AppState] = []
+        script = [[], [Command.TOGGLE_PAUSE], [], [Command.TOGGLE_PAUSE]]
+        deps, _, _ = make_deps(script, [capture])
+        deps.on_state = seen.append
+        run_loop(deps)
+        # initial(unpaused) + toggle to paused + toggle back + final QUIT state
+        assert seen[0] == AppState()
+        assert AppState(paused=True) in seen
+        assert seen[-1].running is False
+        # no consecutive duplicates (fires only when state changes)
+        assert all(a != b for a, b in itertools.pairwise(seen))
+
     def test_overlay_drawn_on_screen_after_present(self):
         drawn: list[object] = []
 
@@ -160,7 +176,7 @@ class TestRunWiring:
 
         pygame.init()
         pygame.event.post(pygame.event.Event(pygame.QUIT))
-        settings = Settings(target=0, windowed=True, hotkeys=False, cursor=False)
+        settings = Settings(target=0, windowed=True, hotkeys=False, cursor=False, tray=False)
         assert app.run(settings) == 0
 
     def test_bad_target_index_raises_detection_error(self, monkeypatch: pytest.MonkeyPatch):
@@ -187,4 +203,4 @@ class TestRunWiring:
             lambda backend="dxcam": "Device[0] Output[0]: Res:(5120, 1440) Rot:0 Primary:True\n",
         )
         with pytest.raises(DetectionError, match="no dxcam output"):
-            app.run(Settings(source=7, hotkeys=False, cursor=False))
+            app.run(Settings(source=7, hotkeys=False, cursor=False, tray=False))

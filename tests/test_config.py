@@ -12,6 +12,8 @@ class TestResolve:
         assert settings.fps == 60
         assert settings.scale == "smooth"
         assert settings.cursor is True
+        assert settings.tray is True
+        assert settings.quit_hotkey == "ctrl+alt+q"
         assert settings.source is None
 
     def test_file_overrides_defaults(self):
@@ -59,9 +61,17 @@ class TestValidation:
         with pytest.raises(ConfigError, match="windowed"):
             resolve({}, {"windowed": 1})
 
+    def test_bad_tray_option(self):
+        with pytest.raises(ConfigError, match="tray"):
+            resolve({}, {"tray": "yes"})
+
     def test_bad_hotkey_type(self):
         with pytest.raises(ConfigError, match="pause_hotkey"):
             resolve({}, {"pause_hotkey": 5})
+
+    def test_bad_quit_hotkey_type(self):
+        with pytest.raises(ConfigError, match="quit_hotkey"):
+            resolve({}, {"quit_hotkey": 5})
 
 
 class TestLoadToml:

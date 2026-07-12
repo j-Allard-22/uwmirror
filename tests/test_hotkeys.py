@@ -36,6 +36,14 @@ class TestParseHotkey:
         assert parse_hotkey("ctrl+space").vk == 0x20
         assert parse_hotkey("win+pause").vk == 0x13
 
+    def test_default_quit_binding(self):
+        assert parse_hotkey("ctrl+alt+q") == Hotkey(MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, ord("Q"))
+
+
+class TestHotkeyAction:
+    def test_has_pause_blank_quit(self):
+        assert {a.value for a in HotkeyAction} == {"pause", "blank", "quit"}
+
     def test_whitespace_tolerated(self):
         assert parse_hotkey(" ctrl + alt + p ") == parse_hotkey("ctrl+alt+p")
 

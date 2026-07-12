@@ -17,8 +17,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - `uwmirror diagnose` — side-by-side listing of dxcam outputs, pygame
   displays, and Windows monitor rects, with a ready-to-paste config snippet.
 - Cursor overlay (Desktop Duplication omits the hardware cursor).
-- Global pause (`Ctrl+Alt+P`) and blank (`Ctrl+Alt+B`) hotkeys via
-  `RegisterHotKey`; local window keys as fallback.
+- Global pause (`Ctrl+Alt+P`), blank (`Ctrl+Alt+B`), and quit (`Ctrl+Alt+Q`)
+  hotkeys via `RegisterHotKey`; local window keys as fallback.
+- Optional system-tray icon (`uwmirror[tray]`) with Pause/Blank/Quit and live
+  state — the primary control surface for the focus-less mirror window.
+- Standalone single-file `uwmirror.exe` (PyInstaller, no console, tray bundled)
+  attached to each GitHub Release for users without Python.
 - Topmost, no-focus-steal mirror window.
 - TOML configuration at `%APPDATA%\uwmirror\config.toml` with
   CLI > file > auto-detection precedence.

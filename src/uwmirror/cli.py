@@ -93,7 +93,13 @@ def _add_run_options(parser: argparse.ArgumentParser) -> None:
         "--hotkeys",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="register global pause/blank hotkeys; default on",
+        help="register global pause/blank/quit hotkeys; default on",
+    )
+    parser.add_argument(
+        "--tray",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="show a system-tray icon for pause/blank/quit; default on (needs the [tray] extra)",
     )
     parser.add_argument(
         "--pause-hotkey",
@@ -106,6 +112,12 @@ def _add_run_options(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="SPEC",
         help="global hotkey to black out the mirror (default ctrl+alt+b)",
+    )
+    parser.add_argument(
+        "--quit-hotkey",
+        default=None,
+        metavar="SPEC",
+        help="global hotkey to quit the mirror (default ctrl+alt+q)",
     )
     parser.add_argument(
         "--backend",
@@ -144,10 +156,12 @@ def _settings_from_args(args: argparse.Namespace) -> config.Settings:
             "topmost",
             "windowed",
             "hotkeys",
+            "tray",
             "backend",
             "log_level",
             "pause_hotkey",
             "blank_hotkey",
+            "quit_hotkey",
         )
     }
     path = args.config if args.config is not None else config.default_config_path()
