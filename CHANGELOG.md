@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-24
+
 ### Fixed
 
 - **The mirror no longer wedges into an endless capture-rebuild loop on a
@@ -59,6 +61,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   exclusive-fullscreen games) with capped exponential backoff.
 - `uwmirrorw` console-less entry point for Task Scheduler autostart.
 
-[Unreleased]: https://github.com/j-Allard-22/uwmirror/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/j-Allard-22/uwmirror/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/j-Allard-22/uwmirror/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/j-Allard-22/uwmirror/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/j-Allard-22/uwmirror/releases/tag/v1.0.0
