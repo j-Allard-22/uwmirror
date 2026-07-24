@@ -56,6 +56,14 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 
+[tool.ruff.format]
+# Ruff >= 0.16 also formats Python embedded in Markdown code blocks. CI installs
+# ruff unpinned, so that silently turned every doc into a formatting target and
+# broke the lint job on main. The listing in docs/dev-plan.md is a historical
+# prototype whose comments are hand-aligned for reading; reformatting it is pure
+# churn. This project's formatting scope is its Python source.
+exclude = ["*.md"]
+
 [tool.mypy]
 strict = true
 # numpy 2.x stubs use PEP 695 syntax, which mypy only accepts when targeting >= 3.12;
