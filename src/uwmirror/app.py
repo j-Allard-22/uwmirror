@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from uwmirror.hotkeys import HotkeyAction
     from uwmirror.tray import TrayController
 
-from uwmirror.capture import CaptureBackend, CaptureLost, Frame
+from uwmirror.capture import CaptureBackend, CaptureLost, Frame, FrameUnavailable
 from uwmirror.config import DEFAULT_FPS, Settings
 from uwmirror.geometry import Region, aspect, center_crop
 from uwmirror.recovery import RetryPolicy
@@ -164,6 +164,7 @@ def run_loop(deps: LoopDeps) -> None:
     overlay: OverlayLike | None = None
     state = AppState(fps=deps.initial_fps)
     was_blanked = False
+    frameless = False  # logged once per stall, not every FRAME_TIMEOUT
     if deps.on_state is not None:
         deps.on_state(state)
 
@@ -209,6 +210,15 @@ def run_loop(deps: LoopDeps) -> None:
 
             try:
                 frame = backend.get_latest_frame()
+            except FrameUnavailable:
+                # Alive, just nothing new: hold the last presented frame. A
+                # rebuild cannot conjure a frame dxcam has no source for, and
+                # on a static desktop it loops forever (see FrameUnavailable).
+                if not frameless:
+                    log.info("no new frames (static desktop or display asleep); holding last frame")
+                    frameless = True
+                deps.tick(state.fps)
+                continue
             except CaptureLost as exc:
                 log.warning("capture lost (%s); reinitializing", exc)
                 backend.stop()
@@ -216,6 +226,9 @@ def run_loop(deps: LoopDeps) -> None:
                 deps.policy.wait()
                 continue
 
+            if frameless:
+                log.info("frames resumed")
+                frameless = False
             deps.policy.reset()
             deps.presenter.present(frame)
             if overlay is not None:

@@ -151,6 +151,59 @@ class TestRunLoop:
         assert presenter.presented == []
 
 
+class TestFramelessCapture:
+    """A healthy capture with nothing new must hold, not rebuild.
+
+    dxcam's video_mode can only re-emit a frame it already captured, so a fresh
+    camera on a fully static desktop emits nothing at all. Rebuilding produces
+    another empty one — which is what used to loop at FRAME_TIMEOUT forever.
+    """
+
+    def test_frameless_tick_holds_the_last_frame(self):
+        capture = FakeCapture(frameless_on={2})
+        deps, presenter, ticks = make_deps([[], [], []], [capture], fps=30)
+        run_loop(deps)
+        assert len(presenter.presented) == 2  # tick 2 held, not repainted
+        assert presenter.flips == 2
+        assert ticks == [30, 30, 30]  # still paced, still responsive
+
+    def test_permanently_frameless_never_rebuilds(self):
+        # Pool of ONE: any rebuild trips make_deps' factory AssertionError.
+        capture = FakeCapture(frameless_from=1)
+        deps, presenter, ticks = make_deps([[], [], [], [], []], [capture], fps=15)
+        run_loop(deps)
+        assert capture.frame_calls == 5
+        assert presenter.presented == []
+        assert len(ticks) == 5
+        assert deps.policy.failures == 0  # no backoff: this is not a failure
+
+    def test_stays_responsive_while_frameless(self):
+        # The whole point of the timeout: commands still land during a stall.
+        capture = FakeCapture(frameless_from=1)
+        script = [[], [Command.TOGGLE_BLANK], [], [Command.QUIT]]
+        deps, presenter, _ = make_deps(script, [capture], fps=30)
+        run_loop(deps)
+        assert presenter.blanks == 1  # blank applied mid-stall
+        assert capture.stopped  # clean shutdown, not a hang
+
+    def test_frames_resume_after_a_stall_without_a_rebuild(self):
+        capture = FakeCapture(frameless_on={2, 3})
+        deps, presenter, _ = make_deps([[], [], [], [], []], [capture], fps=30)
+        run_loop(deps)
+        assert len(presenter.presented) == 3  # ticks 1, 4, 5
+        assert capture.frame_calls == 5
+
+    def test_a_real_loss_still_rebuilds(self):
+        # The fix must not blunt genuine device loss.
+        first = FakeCapture(fail_on_frames={2})
+        second = FakeCapture()
+        deps, presenter, _ = make_deps([[], [], [], []], [first, second])
+        run_loop(deps)
+        assert first.stopped
+        assert second.stopped
+        assert len(presenter.presented) == 3
+
+
 class TestFrameRate:
     """Runtime fps changes (the tray's Frame rate submenu)."""
 

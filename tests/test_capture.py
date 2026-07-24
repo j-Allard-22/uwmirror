@@ -5,7 +5,7 @@ import types
 import numpy as np
 import pytest
 
-from uwmirror.capture import CaptureLost, DxcamCapture, output_info_text
+from uwmirror.capture import CaptureLost, DxcamCapture, FrameUnavailable, output_info_text
 from uwmirror.geometry import Region
 
 REGION = Region(1280, 0, 3840, 1440)  # 2560x1440 crop
@@ -26,6 +26,7 @@ class FakeDxCamera:
         self.stopped = False
         self.released = False
         self.stalled = False
+        self.is_capturing = True  # dxcam clears this when its capture loop dies
         self.next_frame: object = np.zeros((1440, 2560, 3), dtype=np.uint8)
 
     def start(self, **kwargs):
@@ -153,9 +154,48 @@ class TestDxcamCapture:
         camera.stalled = True
         capture.start(REGION, target_fps=60)
         started = time.monotonic()
-        with pytest.raises(CaptureLost, match="no frame within"):
+        with pytest.raises(FrameUnavailable, match="no new frame within"):
             capture.get_latest_frame(timeout=0.2)
         assert time.monotonic() - started < 1.5
+
+    def test_stall_is_not_capture_lost(self, started_capture):
+        """A healthy-but-frameless capture must not trigger a rebuild.
+
+        Rebuilding cannot fix it: dxcam's video_mode only re-emits a frame it
+        already holds, so a fresh camera on a static desktop is equally empty.
+        """
+        capture, camera = started_capture
+        camera.stalled = True
+        capture.start(REGION, target_fps=60)
+        with pytest.raises(FrameUnavailable):
+            capture.get_latest_frame(timeout=0.05)
+        assert not isinstance(FrameUnavailable("x"), CaptureLost)
+        # still usable: the same camera delivers once the desktop changes again
+        camera.stalled = False
+        assert capture.get_latest_frame(timeout=2.0).shape == (1440, 2560, 3)
+
+    def test_frame_unavailable_is_not_a_capture_lost_subclass(self):
+        """The crux of the fix: `except CaptureLost` must not swallow a stall."""
+        assert not issubclass(FrameUnavailable, CaptureLost)
+
+    def test_health_check_sees_a_dead_reader(self, started_capture):
+        """A timeout is only benign while the reader thread is still alive."""
+        capture, camera = started_capture
+        capture.start(REGION, target_fps=60)
+        assert capture._is_healthy() is True
+        camera.stopped = True  # fake returns None -> reader records failure and exits
+        capture._reader.join(timeout=2.0)
+        assert capture._reader.is_alive() is False
+        assert capture._is_healthy() is False
+
+    def test_not_capturing_is_capture_lost(self, started_capture):
+        """dxcam reporting is_capturing=False means the device died."""
+        capture, camera = started_capture
+        camera.stalled = True
+        camera.is_capturing = False
+        capture.start(REGION, target_fps=60)
+        with pytest.raises(CaptureLost, match="stopped without reporting"):
+            capture.get_latest_frame(timeout=0.05)
 
     def test_create_returning_none_raises(self, fake_dxcam, monkeypatch):
         module, _ = fake_dxcam

@@ -5,18 +5,27 @@ from __future__ import annotations
 import numpy as np
 
 from uwmirror.app import Command, LoopCommand
-from uwmirror.capture import CaptureLost
+from uwmirror.capture import CaptureLost, FrameUnavailable
 from uwmirror.geometry import Region
 
 
 class FakeCapture:
-    """CaptureBackend double: emits solid frames, fails on scheduled calls."""
+    """CaptureBackend double: emits solid frames, fails on scheduled calls.
+
+    ``frameless_on``/``frameless_from`` simulate a *healthy but frameless*
+    capture — the state a real dxcam camera sits in when the source monitor has
+    zero pixel changes, where video_mode has no earlier frame to re-emit.
+    ``frameless_from`` makes it permanent, which is the wedge that used to send
+    the loop into an endless rebuild.
+    """
 
     def __init__(
         self,
         width: int = 5120,
         height: int = 1440,
         fail_on_frames: set[int] | None = None,
+        frameless_on: set[int] | None = None,
+        frameless_from: int | None = None,
     ) -> None:
         self.width = width
         self.height = height
@@ -25,6 +34,8 @@ class FakeCapture:
         self.stopped = False
         self.frame_calls = 0
         self._fail_on = fail_on_frames or set()
+        self._frameless_on = frameless_on or set()
+        self._frameless_from = frameless_from
 
     def start(self, region: Region, target_fps: int) -> None:
         self.started_region = region
@@ -34,6 +45,10 @@ class FakeCapture:
         self.frame_calls += 1
         if self.frame_calls in self._fail_on:
             raise CaptureLost("scheduled failure")
+        if self.frame_calls in self._frameless_on or (
+            self._frameless_from is not None and self.frame_calls >= self._frameless_from
+        ):
+            raise FrameUnavailable("scheduled frameless tick")
         assert self.started_region is not None
         w, h = self.started_region.size
         return np.zeros((h, w, 3), dtype=np.uint8)

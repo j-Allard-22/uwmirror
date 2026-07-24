@@ -7,6 +7,19 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The mirror no longer wedges into an endless capture-rebuild loop on a
+  static desktop.** dxcam's `video_mode` re-emits a frame it has already
+  captured, so a freshly created camera aimed at a monitor with zero pixel
+  changes emits nothing at all — and uwmirror treated that 2-second timeout as
+  device loss, rebuilt, and landed in the same state, roughly every 2 seconds
+  indefinitely. A timeout on a healthy capture is now reported separately
+  (`FrameUnavailable`) and simply holds the last frame; only a genuine device
+  failure still rebuilds. An unchanged desktop needs no repaint, so this is
+  also cheaper: during a stall the loop is now frame-rate-paced instead of
+  spinning through backoff.
+
 ## [1.1.0] - 2026-07-24
 
 ### Added
