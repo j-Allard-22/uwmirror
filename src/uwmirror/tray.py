@@ -11,8 +11,11 @@ core package installs and runs without them (``pip install uwmirror[tray]``
 to enable). :func:`draw_icon_image` is the single source of the icon artwork,
 shared with the PyInstaller ``.ico`` generation — no binary asset in the repo.
 
-Menu state (the Pause/Blank checkmarks) is read from a live snapshot the main
-loop pushes via :meth:`TrayController.set_state`.
+Menu state (the Pause/Blank checkmarks and the Frame rate radio) is read from a
+live snapshot the main loop pushes via :meth:`TrayController.set_state`. That
+snapshot is written by the main loop's thread and read by pystray's, but it is
+a single rebind of an immutable :class:`~uwmirror.app.AppState`, so a reader
+sees either the old snapshot or the new one and no lock is needed.
 """
 
 from __future__ import annotations
@@ -20,9 +23,10 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from uwmirror.app import AppState, Command
+from uwmirror.app import AppState, Command, LoopCommand, SetFps
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -34,6 +38,11 @@ log = logging.getLogger(__name__)
 _BEZEL = (228, 228, 232, 255)
 _SCREEN = (60, 63, 70, 255)
 _CROP = (94, 176, 255, 255)
+
+#: Rates offered in the Frame rate radio submenu. Picking one applies for this
+#: session only — nothing is written back to config.toml, so ``fps`` there (or
+#: --fps) remains the way to change the rate the mirror starts at.
+FPS_PRESETS: tuple[int, ...] = (15, 30, 60, 120)
 
 
 class TrayUnavailable(Exception):
@@ -84,7 +93,7 @@ class TrayController:
     READY_TIMEOUT = 5.0
 
     def __init__(self) -> None:
-        self.actions: queue.SimpleQueue[Command] = queue.SimpleQueue()
+        self.actions: queue.SimpleQueue[LoopCommand] = queue.SimpleQueue()
         self._state = AppState()
         self._icon: Any | None = None
 
@@ -111,6 +120,7 @@ class TrayController:
             pystray.MenuItem(
                 "Blank", self._on(Command.TOGGLE_BLANK), checked=lambda _i: self._state.blanked
             ),
+            pystray.MenuItem("Frame rate", self._fps_menu(pystray)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", self._on(Command.QUIT)),
         )
@@ -130,7 +140,35 @@ class TrayController:
                 "system tray icon did not finish initializing within %.0fs", self.READY_TIMEOUT
             )
 
-    def _on(self, command: Command) -> Any:
+    def _fps_menu(self, pystray: Any) -> Any:
+        """Radio submenu of the frame-rate presets.
+
+        Passing a ``Menu`` as an item's action is what makes pystray treat it
+        as a submenu; the parent item itself becomes inert. ``radio=True`` only
+        takes effect alongside a ``checked`` callable, and Win32 does not
+        enforce mutual exclusion — the callables are the only thing keeping
+        exactly one preset lit.
+        """
+        return pystray.Menu(
+            *(
+                pystray.MenuItem(
+                    f"{fps} fps", self._on(SetFps(fps)), checked=self._is_fps(fps), radio=True
+                )
+                for fps in FPS_PRESETS
+            )
+        )
+
+    def _is_fps(self, fps: int) -> Callable[[Any], bool]:
+        """Build a checked-predicate bound to *fps*.
+
+        Deliberately a factory: an inline ``lambda _item: self._state.fps ==
+        fps`` inside the generator above would close over the generator's
+        single loop cell, so every preset would compare against the last one
+        and all four checkmarks would move as a block.
+        """
+        return lambda _item: self._state.fps == fps
+
+    def _on(self, command: LoopCommand) -> Any:
         def handler(_icon: Any, _item: Any) -> None:
             self.actions.put(command)
 

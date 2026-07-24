@@ -7,6 +7,22 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-24
+
+### Added
+
+- Tray **Frame rate** submenu (15 / 30 / 60 / 120 fps) with a live radio
+  checkmark, changing the capture and present rate at runtime. Switching
+  restarts the capture, so the mirror freezes briefly. The choice applies to
+  the running session only and is never written back to `config.toml`.
+
+### Changed
+
+- **The default frame rate is now 15 fps (was 60).** Mirroring a mostly static
+  desktop does not need 60, and the new tray submenu makes raising it a
+  two-click action. Configurations that already set `fps` are unaffected; pass
+  `--fps 60` or set `fps = 60` in `config.toml` to restore the old default.
+
 ## [1.0.0] - 2026-07-11
 
 ### Added
@@ -30,5 +46,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   exclusive-fullscreen games) with capped exponential backoff.
 - `uwmirrorw` console-less entry point for Task Scheduler autostart.
 
-[Unreleased]: https://github.com/j-Allard-22/uwmirror/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/j-Allard-22/uwmirror/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/j-Allard-22/uwmirror/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/j-Allard-22/uwmirror/releases/tag/v1.0.0

@@ -21,6 +21,10 @@ SCALE_MODES = ("smooth", "fast")
 BACKENDS = ("dxcam", "dxcam-cpp")
 LOG_LEVELS = ("debug", "info", "warning", "error")
 MAX_FPS = 240
+#: Shipped default capture/present rate. Low on purpose — mirroring a mostly
+#: static desktop costs almost nothing at 15; raise it from the tray's Frame
+#: rate submenu, --fps, or config.toml.
+DEFAULT_FPS = 15
 
 
 class ConfigError(Exception):
@@ -33,7 +37,7 @@ class Settings:
 
     source: int | None = None
     target: int | None = None
-    fps: int = 60
+    fps: int = DEFAULT_FPS
     scale: str = "smooth"
     cursor: bool = True
     topmost: bool = True

@@ -64,7 +64,12 @@ def _add_run_options(parser: argparse.ArgumentParser) -> None:
         help="pygame display index to present on (default: auto-detect;"
         " NOTE: numbered independently from --source)",
     )
-    parser.add_argument("--fps", type=int, default=None, help="capture/present rate (default 60)")
+    parser.add_argument(
+        "--fps",
+        type=int,
+        default=None,
+        help="capture/present rate (default 15; also switchable at runtime from the tray)",
+    )
     parser.add_argument(
         "--scale",
         choices=config.SCALE_MODES,

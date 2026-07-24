@@ -3,8 +3,9 @@ import itertools
 import pytest
 from fakes import FakeCapture, FakePresenter, FakeScreen, ScriptedCommands
 
-from uwmirror.app import AppState, Command, LoopDeps, reduce_state, run_loop
+from uwmirror.app import AppState, Command, LoopCommand, LoopDeps, SetFps, reduce_state, run_loop
 from uwmirror.capture import CaptureLost
+from uwmirror.config import DEFAULT_FPS, Settings
 from uwmirror.recovery import RetryPolicy
 
 SIXTEEN_NINE = 16 / 9
@@ -32,11 +33,31 @@ class TestReduceState:
         assert state.paused is True
         assert state.running is False
 
+    def test_set_fps_replaces_the_value(self):
+        assert reduce_state(AppState(), [SetFps(30)]).fps == 30
+
+    def test_last_set_fps_in_a_batch_wins(self):
+        # One batch must produce one restart, not one per click.
+        assert reduce_state(AppState(), [SetFps(30), SetFps(120)]).fps == 120
+
+    def test_set_fps_preserves_pause_and_blank(self):
+        state = reduce_state(AppState(paused=True, blanked=True), [SetFps(120)])
+        assert state == AppState(paused=True, blanked=True, fps=120)
+
+    def test_toggles_preserve_fps(self):
+        # Regression guard: a reducer that rebuilds AppState field by field
+        # silently resets any field it forgets to mention.
+        assert reduce_state(AppState(fps=120), [Command.TOGGLE_PAUSE]).fps == 120
+
+    def test_default_fps_matches_the_settings_default(self):
+        assert AppState().fps == Settings().fps == DEFAULT_FPS
+
 
 def make_deps(
-    script: list[list[Command]],
+    script: list[list[LoopCommand]],
     captures: list[FakeCapture],
     presenter: FakePresenter | None = None,
+    fps: int = DEFAULT_FPS,
 ) -> tuple[LoopDeps, FakePresenter, list[int]]:
     presenter = presenter or FakePresenter()
     ticks: list[int] = []
@@ -55,7 +76,7 @@ def make_deps(
         get_commands=ScriptedCommands(script),
         policy=RetryPolicy(sleep=lambda _s: None),
         tick=ticks.append,
-        fps=60,
+        initial_fps=fps,
         target_aspect=SIXTEEN_NINE,
     )
     return deps, presenter, ticks
@@ -77,7 +98,6 @@ class TestRunLoop:
         run_loop(deps)
         assert capture.started_region is not None
         assert capture.started_region.as_tuple() == (1280, 0, 3840, 1440)
-        assert capture.started_fps == 60
 
     def test_pause_freezes_presentation(self):
         capture = FakeCapture()
@@ -129,6 +149,63 @@ class TestRunLoop:
         deps, presenter, _ = make_deps([[Command.QUIT]], [])
         run_loop(deps)  # factory pool is empty; creating a backend would assert
         assert presenter.presented == []
+
+
+class TestFrameRate:
+    """Runtime fps changes (the tray's Frame rate submenu)."""
+
+    def test_initial_fps_seeds_the_backend_and_the_clock(self):
+        capture = FakeCapture()
+        deps, _, ticks = make_deps([[], []], [capture], fps=30)
+        run_loop(deps)
+        assert capture.started_fps == 30
+        assert ticks == [30, 30]
+
+    def test_set_fps_restarts_the_backend_without_dropping_a_frame(self):
+        first, second = FakeCapture(), FakeCapture()
+        deps, presenter, ticks = make_deps([[], [SetFps(120)], []], [first, second], fps=30)
+        run_loop(deps)
+        assert first.started_fps == 30
+        assert first.stopped
+        assert second.started_fps == 120
+        assert second.stopped
+        assert ticks == [30, 120, 120]
+        # The restart happens within the tick, unlike the device-lost path,
+        # which loses the frame that failed.
+        assert len(presenter.presented) == 3
+
+    def test_setting_the_active_rate_does_not_restart(self):
+        capture = FakeCapture()  # pool of one: a restart trips the factory assert
+        seen: list[AppState] = []
+        deps, presenter, _ = make_deps([[], [SetFps(30)], []], [capture], fps=30)
+        deps.on_state = seen.append
+        run_loop(deps)
+        assert len(presenter.presented) == 3
+        assert seen == [AppState(fps=30), AppState(running=False, fps=30)]
+
+    def test_change_while_paused_applies_on_resume(self):
+        first, second = FakeCapture(), FakeCapture()
+        script = [[], [Command.TOGGLE_PAUSE], [SetFps(120)], [], [Command.TOGGLE_PAUSE], []]
+        deps, presenter, ticks = make_deps(script, [first, second], fps=30)
+        run_loop(deps)
+        assert first.started_fps == 30
+        assert second.started_fps == 120  # restarted on resume, not during the pause
+        assert ticks == [30, 30, 120, 120, 120, 120]  # idle poll rate changes at once
+        assert len(presenter.presented) == 3
+
+    def test_change_before_the_first_backend_starts_at_the_new_rate(self):
+        capture = FakeCapture()  # pool of one: a wasted start at 15 trips the assert
+        script = [[Command.TOGGLE_PAUSE], [SetFps(60)], [Command.TOGGLE_PAUSE], []]
+        deps, _, _ = make_deps(script, [capture], fps=15)
+        run_loop(deps)
+        assert capture.started_fps == 60
+
+    def test_on_state_reports_the_change(self):
+        seen: list[AppState] = []
+        deps, _, _ = make_deps([[], [SetFps(120)]], [FakeCapture(), FakeCapture()])
+        deps.on_state = seen.append
+        run_loop(deps)
+        assert AppState(fps=120) in seen  # this is what moves the tray's radio dot
 
     def test_on_state_fires_initially_and_on_change_only(self):
         capture = FakeCapture()

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import queue
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from uwmirror.tray import TrayController
 
 from uwmirror.capture import CaptureBackend, CaptureLost, Frame
-from uwmirror.config import Settings
+from uwmirror.config import DEFAULT_FPS, Settings
 from uwmirror.geometry import Region, aspect, center_crop
 from uwmirror.recovery import RetryPolicy
 
@@ -35,23 +35,41 @@ class Command(Enum):
 
 
 @dataclass(frozen=True)
+class SetFps:
+    """Set the capture/present rate for this session (never persisted)."""
+
+    value: int
+
+
+#: Everything the loop accepts on its command channel.
+LoopCommand = Command | SetFps
+
+
+@dataclass(frozen=True)
 class AppState:
     running: bool = True
     paused: bool = False
     blanked: bool = False
+    fps: int = DEFAULT_FPS
 
 
-def reduce_state(state: AppState, commands: list[Command]) -> AppState:
-    """Pure state transition: fold commands into a new state."""
-    running, paused, blanked = state.running, state.paused, state.blanked
+def reduce_state(state: AppState, commands: Sequence[LoopCommand]) -> AppState:
+    """Pure state transition: fold commands into a new state.
+
+    Built by folding ``replace`` rather than rebuilding ``AppState`` field by
+    field, so a field added here later cannot be silently dropped back to its
+    default by a command that does not mention it.
+    """
     for command in commands:
-        if command is Command.QUIT:
-            running = False
+        if isinstance(command, SetFps):
+            state = replace(state, fps=command.value)
+        elif command is Command.QUIT:
+            state = replace(state, running=False)
         elif command is Command.TOGGLE_PAUSE:
-            paused = not paused
+            state = replace(state, paused=not state.paused)
         elif command is Command.TOGGLE_BLANK:
-            blanked = not blanked
-    return AppState(running=running, paused=paused, blanked=blanked)
+            state = replace(state, blanked=not state.blanked)
+    return state
 
 
 class PresenterLike(Protocol):
@@ -76,17 +94,18 @@ class LoopDeps:
     presenter: PresenterLike
     screen: pygame.Surface
     make_overlay: Callable[[CaptureBackend, Region], OverlayLike | None]
-    get_commands: Callable[[], list[Command]]
+    get_commands: Callable[[], list[LoopCommand]]
     policy: RetryPolicy
     tick: Callable[[int], object]
-    fps: int
+    #: Seed for ``AppState.fps`` only — the loop reads ``state.fps`` thereafter.
+    initial_fps: int
     target_aspect: float
     on_state: Callable[[AppState], None] | None = None
 
 
 def _drain(
     source: queue.SimpleQueue[Any],
-    commands: list[Command],
+    commands: list[LoopCommand],
     mapping: dict[HotkeyAction, Command] | None = None,
 ) -> None:
     """Move every queued item into ``commands``, mapping actions to commands."""
@@ -120,11 +139,11 @@ def _start_tray(settings: Settings) -> TrayController | None:
     return tray
 
 
-def _start_backend(deps: LoopDeps) -> tuple[CaptureBackend, Region]:
+def _start_backend(deps: LoopDeps, fps: int) -> tuple[CaptureBackend, Region]:
     backend = deps.backend_factory()
     region = center_crop(backend.width, backend.height, deps.target_aspect)
     try:
-        backend.start(region, deps.fps)
+        backend.start(region, fps)
     except CaptureLost:
         backend.stop()
         raise
@@ -133,7 +152,7 @@ def _start_backend(deps: LoopDeps) -> tuple[CaptureBackend, Region]:
         region.width,
         region.height,
         region.as_tuple(),
-        deps.fps,
+        fps,
     )
     return backend, region
 
@@ -141,8 +160,9 @@ def _start_backend(deps: LoopDeps) -> tuple[CaptureBackend, Region]:
 def run_loop(deps: LoopDeps) -> None:
     """Present frames until a QUIT command; recreate the backend when capture dies."""
     backend: CaptureBackend | None = None
+    backend_fps: int | None = None  # rate the live backend was started with
     overlay: OverlayLike | None = None
-    state = AppState()
+    state = AppState(fps=deps.initial_fps)
     was_blanked = False
     if deps.on_state is not None:
         deps.on_state(state)
@@ -161,17 +181,26 @@ def run_loop(deps: LoopDeps) -> None:
                     deps.presenter.blank()
                     deps.presenter.flip()
                 was_blanked = True
-                deps.tick(deps.fps)
+                deps.tick(state.fps)
                 continue
             was_blanked = False
 
             if state.paused:  # front buffer keeps the last presented frame
-                deps.tick(deps.fps)
+                deps.tick(state.fps)
                 continue
+
+            # dxcam bakes target_fps into camera.start() and exposes no setter,
+            # so a rate change reuses the device-lost path: drop the backend and
+            # let the block below recreate it with a freshly recomputed crop.
+            if backend is not None and backend_fps != state.fps:
+                log.info("frame rate changed to %d fps; restarting capture", state.fps)
+                backend.stop()
+                backend = None
 
             if backend is None:
                 try:
-                    backend, region = _start_backend(deps)
+                    backend, region = _start_backend(deps, state.fps)
+                    backend_fps = state.fps
                     overlay = deps.make_overlay(backend, region)
                 except CaptureLost as exc:
                     log.warning("capture unavailable (%s); retrying", exc)
@@ -192,7 +221,7 @@ def run_loop(deps: LoopDeps) -> None:
             if overlay is not None:
                 overlay.draw(deps.screen)
             deps.presenter.flip()
-            deps.tick(deps.fps)
+            deps.tick(state.fps)
     finally:
         if backend is not None:
             backend.stop()
@@ -281,8 +310,8 @@ def run(settings: Settings) -> int:
 
     tray = _start_tray(settings)
 
-    def get_commands() -> list[Command]:
-        commands: list[Command] = []
+    def get_commands() -> list[LoopCommand]:
+        commands: list[LoopCommand] = []
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 commands.append(Command.QUIT)
@@ -310,7 +339,7 @@ def run(settings: Settings) -> int:
         get_commands=get_commands,
         policy=RetryPolicy(),
         tick=clock.tick,
-        fps=settings.fps,
+        initial_fps=settings.fps,
         target_aspect=aspect(target_size),
         on_state=(tray.set_state if tray is not None else None),
     )

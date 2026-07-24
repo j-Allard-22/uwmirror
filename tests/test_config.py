@@ -9,7 +9,7 @@ class TestResolve:
     def test_defaults(self):
         settings = resolve({}, {})
         assert settings == Settings()
-        assert settings.fps == 60
+        assert settings.fps == 15
         assert settings.scale == "smooth"
         assert settings.cursor is True
         assert settings.tray is True

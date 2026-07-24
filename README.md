@@ -66,7 +66,7 @@ Every flag can also be set in `%APPDATA%\uwmirror\config.toml` (same names,
 |---|---|---|
 | `--source N` | auto | dxcam output index of the monitor to capture |
 | `--target N` | auto | pygame display index of the TV |
-| `--fps N` | 60 | capture/present rate (30 halves CPU use) |
+| `--fps N` | 15 | capture/present rate; also switchable at runtime from the tray |
 | `--scale smooth\|fast` | smooth | downscale filter when the crop is larger than the TV |
 | `--cursor` / `--no-cursor` | on | overlay the mouse cursor (capture omits it) |
 | `--topmost` / `--no-topmost` | on | keep the mirror above other windows, without stealing focus |
@@ -92,8 +92,8 @@ pause-hotkey = "ctrl+alt+f9"
 ## Controls
 
 The mirror window on the TV deliberately never takes focus, so you drive it
-from the **tray icon** (right-click → Pause / Blank / Quit, with live
-checkmarks) and from **global hotkeys**:
+from the **tray icon** (right-click → Pause / Blank / Frame rate / Quit, with
+live checkmarks) and from **global hotkeys**:
 
 | Keys | Action |
 |---|---|
@@ -105,6 +105,15 @@ checkmarks) and from **global hotkeys**:
 Global hotkeys use `RegisterHotKey` — no admin rights, no keyboard hooks. If a
 chord is taken by another app, uwmirror logs a warning and keeps running; pick
 a different chord with `--pause-hotkey`/`--blank-hotkey`/`--quit-hotkey`.
+
+**Frame rate** offers 15 / 30 / 60 / 120 fps. The default is 15 — a desktop
+mirror rarely needs more, and raising it for a game or a video is two clicks.
+Switching restarts the capture, so the mirror freezes for a moment. The choice
+lasts for the session only and is never written back to `config.toml`; set
+`fps` there (or pass `--fps`) to change the rate uwmirror *starts* at. A
+non-preset value such as `--fps 90` simply leaves all four entries unchecked
+until you pick one. Frame rate is tray-only — with no tray there is no runtime
+control, so use `--fps`.
 
 ## Start automatically at logon
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from uwmirror.app import Command
+from uwmirror.app import Command, LoopCommand
 from uwmirror.capture import CaptureLost
 from uwmirror.geometry import Region
 
@@ -74,10 +74,10 @@ class FakeScreen:
 class ScriptedCommands:
     """Yields one scripted command batch per loop tick, then QUIT forever."""
 
-    def __init__(self, script: list[list[Command]]) -> None:
+    def __init__(self, script: list[list[LoopCommand]]) -> None:
         self._script = list(script)
 
-    def __call__(self) -> list[Command]:
+    def __call__(self) -> list[LoopCommand]:
         if self._script:
             return self._script.pop(0)
         return [Command.QUIT]
